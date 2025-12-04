@@ -1,14 +1,12 @@
 import streamlit as st
-import os
 import google.generativeai as genai
 from canvasapi import Canvas
-from duckduckgo_search import DDGS
-from datetime import datetime, timedelta
+from googleapiclient.discovery import build
+from datetime import datetime
 
-# --- A.P.E.X. CONFIGURATION (The "Sleek" UI) ---
+# --- A.P.E.X. CONFIGURATION ---
 st.set_page_config(page_title="O.M.N.I.", page_icon="🟣", layout="wide")
 
-# Hide standard Streamlit chrome for that "App" feel
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -23,26 +21,44 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# --- THE VAULT (Secrets Management) ---
-# We grab keys from Streamlit Secrets (configured later in browser)
+# --- THE VAULT (Secrets) ---
 try:
+    # Gemini Key
     GENAI_KEY = st.secrets["GENAI_KEY"]
+    
+    # Canvas Keys
     CANVAS_API_URL = st.secrets["CANVAS_API_URL"]
     CANVAS_API_KEY = st.secrets["CANVAS_API_KEY"]
-except:
-    st.error("SYSTEM ALERT: Critical Keys Missing. Configure Secrets in Streamlit Dashboard.")
+    
+    # Google Search Keys
+    GOOGLE_SEARCH_KEY = st.secrets["GOOGLE_SEARCH_KEY"]
+    GOOGLE_CX = st.secrets["GOOGLE_CX"]
+    
+except Exception as e:
+    st.error(f"SYSTEM ALERT: Secrets Configuration Incomplete. {e}")
     st.stop()
 
-# --- THE TOOLKIT (Virtual Experts) ---
+# --- THE TOOLKIT ---
 
-def search_web(query):
-    """Real-time web access via DuckDuckGo."""
+def google_search(query):
+    """Performs an Official Google Search."""
     try:
-        with DDGS() as ddgs:
-            results = [r for r in ddgs.text(query, max_results=3)]
-        return str(results)
+        service = build("customsearch", "v1", developerKey=GOOGLE_SEARCH_KEY)
+        res = service.cse().list(q=query, cx=GOOGLE_CX, num=3).execute()
+        
+        results = []
+        if 'items' in res:
+            for item in res['items']:
+                title = item.get('title')
+                snippet = item.get('snippet')
+                link = item.get('link')
+                results.append(f"Title: {title}\nSnippet: {snippet}\nLink: {link}\n---")
+            return "\n".join(results)
+        else:
+            return "No results found on Google."
+            
     except Exception as e:
-        return f"Search Offline: {e}"
+        return f"Google Search Uplink Failed: {e}"
 
 def get_canvas_data(scope="assignments"):
     """Connects to School Canvas LMS."""
@@ -51,15 +67,16 @@ def get_canvas_data(scope="assignments"):
         user = canvas.get_current_user()
         
         output = []
-        if scope == "assignments":
-            courses = user.get_courses(enrollment_state='active')
-            for course in courses:
-                # fetch assignments due in next 14 days
+        courses = user.get_courses(enrollment_state='active')
+        for course in courses:
+            try:
                 assignments = course.get_assignments(bucket='upcoming')
                 for a in assignments:
                     if a.due_at:
                         due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
                         output.append(f"[Course: {course.name}] {a.name} (Due: {due.strftime('%m-%d %H:%M')})")
+            except:
+                continue
         
         return "\n".join(output) if output else "No upcoming tasks found."
     except Exception as e:
@@ -68,66 +85,59 @@ def get_canvas_data(scope="assignments"):
 # --- THE BRAIN (Gemini 1.5 Pro) ---
 genai.configure(api_key=GENAI_KEY)
 
-# Specialized System Instruction
 SYS_PROMPT = """
 You are O.M.N.I. (Operational Matrix & Neural Interface). 
-You are a ruthless, high-efficiency executive assistant.
-Your goal is USER ADVANTAGE.
-1. When asked about school, Check Canvas Data first.
-2. When asked about facts, Check Web Search.
-3. Be concise. Use Markdown. No fluff.
+You are a commercial-grade, high-efficiency executive assistant.
+1. IF the user asks about school/homework -> USE Context Data (Canvas).
+2. IF the user asks for info/news/facts -> USE Context Data (Google Search).
+3. IF no context is needed -> Just answer efficiently.
+4. Format: Clean Markdown. No fluff.
 """
 
 model = genai.GenerativeModel('gemini-1.5-pro-latest', system_instruction=SYS_PROMPT)
 
-# --- THE INTERFACE (Chat Loop) ---
-
-# Title
+# --- THE INTERFACE ---
 st.markdown("<h1 style='text-align: center; color: #a855f7;'>O.M.N.I.</h1>", unsafe_allow_html=True)
 
-# Initialize History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Chat
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Input Handling
 if prompt := st.chat_input("Direct the intelligence..."):
-    # 1. User Message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. A.P.E.X. Processing (The "Thinking" Phase)
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
-        full_response = ""
         
-        # Tool Routing Logic (Simple Version)
+        # --- INTELLIGENT ROUTING ---
         context_data = ""
-        if "due" in prompt.lower() or "school" in prompt.lower() or "homework" in prompt.lower():
-            with st.spinner("Accessing Canvas LMS Node..."):
-                context_data = f"\n[SYSTEM DATA: CANVAS LMS]\n{get_canvas_data()}"
+        user_lower = prompt.lower()
         
-        elif "search" in prompt.lower() or "what is" in prompt.lower() or "news" in prompt.lower():
-            with st.spinner("Scanning Global Web..."):
-                context_data = f"\n[SYSTEM DATA: WEB SEARCH]\n{search_web(prompt)}"
+        # 1. School Route
+        if any(w in user_lower for w in ["due", "school", "homework", "assignment", "canvas"]):
+            with st.spinner("Connecting to Canvas LMS..."):
+                data = get_canvas_data()
+                context_data += f"\n[SYSTEM DATA: CANVAS]\n{data}\n"
 
-        # 3. Generate Response
+        # 2. Google Search Route (Triggers on questions or explicit 'search' commands)
+        elif any(w in user_lower for w in ["search", "find", "what is", "who is", "news", "google"]):
+            with st.spinner("Accessing Google Global Index..."):
+                data = google_search(prompt)
+                context_data += f"\n[SYSTEM DATA: GOOGLE SEARCH]\n{data}\n"
+
+        # 3. Generation
         try:
-            chat = model.start_chat(history=[]) # Stateless for now to keep it simple, or pass full history
-            # We inject the tool data into the prompt for the AI to see
-            final_prompt = f"{prompt}\n{context_data}"
-            
+            chat = model.start_chat(history=[])
+            final_prompt = f"USER REQUEST: {prompt}\n\nAVAILABLE CONTEXT:\n{context_data}"
             response = chat.send_message(final_prompt)
-            full_response = response.text
             
-            message_placeholder.markdown(full_response)
+            message_placeholder.markdown(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            
         except Exception as e:
             message_placeholder.error(f"Neural Link Severed: {e}")
-
-    # 4. Save to Memory
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
