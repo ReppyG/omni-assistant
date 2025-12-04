@@ -202,8 +202,14 @@ if not st.session_state.astra_init:
         sys_prompt = f"You are ASTRA. The user has just logged in.\n\nSTATUS:\n- Academics: {school_status}\n- Calendar: {cal_status}\n\nTASK: Give a 1-sentence Executive Summary of the biggest threat/priority. Be direct."
         try:
             genai.configure(api_key=GENAI_KEY)
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            alert = model.generate_content(sys_prompt).text
+            # Try 3.0 Pro first, then 2.5
+            try:
+                model = genai.GenerativeModel('gemini-3.0-pro')
+                alert = model.generate_content(sys_prompt).text
+            except:
+                model = genai.GenerativeModel('gemini-2.5-flash')
+                alert = model.generate_content(sys_prompt).text
+                
             st.session_state.messages.append({"role": "assistant", "content": alert})
             st.rerun()
         except: pass
@@ -254,7 +260,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     """
 
     # --- GENERATION ---
-    models_to_try = ['gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.5-flash']
+    models_to_try = ['gemini-3.0-pro', 'gemini-2.5-pro', 'gemini-2.5-flash']
     reply = "Neural Link Severed."
     
     for model_name in models_to_try:
