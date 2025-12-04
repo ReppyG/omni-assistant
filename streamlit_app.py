@@ -308,7 +308,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     """
 
     # --- FALLBACK GENERATION LOGIC ---
-    models_to_try = ['gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.5-flash']
+    models_to_try = ['gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.5-flash']
     reply = "Neural Link Severed."
     
     for model_name in models_to_try:
