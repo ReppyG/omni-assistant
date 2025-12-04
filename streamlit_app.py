@@ -14,8 +14,16 @@ import json
 import string
 import io
 
-# --- 1. CONFIGURATION & SETUP ---
-st.set_page_config(page_title="ASTRA", page_icon="✨", layout="wide", initial_sidebar_state="expanded")
+# ═══════════════════════════════════════════════════════════════════════════════
+# 1. CONFIGURATION & SETUP
+# ═══════════════════════════════════════════════════════════════════════════════
+
+st.set_page_config(
+    page_title="ASTRA",
+    page_icon="✨",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- THE VAULT ---
 try:
@@ -32,17 +40,22 @@ except:
     st.error("CRITICAL: Secrets Missing. Please update Streamlit Secrets.")
     st.stop()
 
-# --- 2. CSS VISUAL CORE (Knewave & Slate) ---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2. CSS VISUAL CORE (Knewave & Slate)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Knewave&family=Inter:wght@400;500;600&display=swap');
     
+    /* CORE THEME */
     .stApp { background-color: #020617; font-family: 'Inter', sans-serif; color: #e2e8f0; }
     .block-container { padding-top: 0rem !important; padding-bottom: 5rem !important; max-width: 100% !important; }
     .stSpinner { display: none !important; }
     
     /* ANIMATIONS */
     @keyframes gradientMove { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     
     /* ASTRA LOGO */
     .astra-logo {
@@ -71,8 +84,8 @@ st.markdown("""
     .icon-box { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: rgba(30, 41, 59, 0.5); font-size: 1.2rem; }
 
     /* CHAT BUBBLES */
-    .user-msg { background-color: #334155; color: #f1f5f9; padding: 14px 24px; border-radius: 20px 20px 0 20px; margin-left: auto; max-width: 85%; width: fit-content; margin-bottom: 16px; }
-    .ai-msg { background-color: #0f172a; color: #e2e8f0; padding: 14px 24px; border-radius: 20px 20px 20px 0; margin-right: auto; max-width: 85%; width: fit-content; border: 1px solid #1e293b; margin-bottom: 16px; }
+    .user-msg { background-color: #334155; color: #f1f5f9; padding: 14px 24px; border-radius: 20px 20px 0 20px; margin-left: auto; max-width: 85%; width: fit-content; margin-bottom: 16px; animation: fadeIn 0.3s ease-out; }
+    .ai-msg { background-color: #0f172a; color: #e2e8f0; padding: 14px 24px; border-radius: 20px 20px 20px 0; margin-right: auto; max-width: 85%; width: fit-content; border: 1px solid #1e293b; margin-bottom: 16px; animation: fadeIn 0.3s ease-out; }
 
     /* INPUT */
     .stTextInput input { background-color: rgba(30, 41, 59, 0.8) !important; color: white !important; border-radius: 14px !important; border: 1px solid rgba(99, 102, 241, 0.2) !important; }
@@ -92,7 +105,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. BACKEND INTELLIGENCE ---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3. BACKEND INTELLIGENCE (Upgraded Logic)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data(ttl=900)
 def get_weather():
@@ -158,6 +173,7 @@ def deep_search(query):
     except: return "Search Offline"
 
 def get_grade_analytics_df():
+    """Fetches high-level grade data."""
     try:
         canvas = Canvas(CANVAS_URL, CANVAS_KEY)
         user = canvas.get_current_user()
@@ -165,69 +181,138 @@ def get_grade_analytics_df():
         for c in user.get_courses(enrollment_state='active', include=['total_scores']):
             try:
                 e = getattr(c, 'enrollments', [{}])[0]
-                data.append({"Course": c.name, "Score": e.get('computed_current_score', 0)})
+                score = e.get('computed_current_score', 0)
+                grade = e.get('computed_current_grade', 'N/A')
+                data.append({"Course": c.name, "Score": score, "Grade": grade})
             except: continue
         return pd.DataFrame(data)
     except: return pd.DataFrame()
 
-# --- 4. STATE MANAGEMENT ---
+def get_course_detail(course_query):
+    """Fetches weights for Agent Oracle calculations."""
+    try:
+        canvas = Canvas(CANVAS_URL, CANVAS_KEY)
+        user = canvas.get_current_user()
+        for c in user.get_courses(enrollment_state='active', include=['total_scores']):
+            if course_query.lower() in c.name.lower():
+                weights = []
+                try:
+                    for g in c.get_assignment_groups():
+                        if g.group_weight > 0: weights.append(f"{g.name}: {g.group_weight}%")
+                except: pass
+                weight_str = " | ".join(weights) if weights else "Unweighted"
+                return f"COURSE: {c.name}\nSTRUCTURE: {weight_str}"
+        return "Course not found."
+    except: return "Error fetching course details."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 4. STATE MANAGEMENT
+# ═══════════════════════════════════════════════════════════════════════════════
+
 if "messages" not in st.session_state: st.session_state.messages = []
 if "mode" not in st.session_state: st.session_state.mode = "Standard"
 if "focus_active" not in st.session_state: st.session_state.focus_active = False
 if "focus_end" not in st.session_state: st.session_state.focus_end = None
+if "habits" not in st.session_state: st.session_state.habits = {"Study": False, "Workout": False, "Read": False}
+if "astra_briefing" not in st.session_state: st.session_state.astra_briefing = False
 
-# --- 5. SIDEBAR: THE NEUROMODULES (Upgrade 11, 21, 61, 70, 71, 72, 73, 80) ---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5. SIDEBAR: THE MEGA-EXPANSION
+# ═══════════════════════════════════════════════════════════════════════════════
+
 with st.sidebar:
     st.markdown('<h2 class="astra-logo" style="font-size: 2rem;">ASTRA</h2>', unsafe_allow_html=True)
+    st.caption("SINGULARITY OS V9.2")
     st.markdown("---")
     
-    # MODE SWITCHER (Upgrade 3, 4, 5, 29)
+    # 🧠 COGNITIVE MODE
     st.subheader("🧠 Cognitive Mode")
-    mode = st.selectbox("Select Personality", ["Standard", "Socratic (Questions Only)", "Debate Partner", "ELI5 (Simple)", "Code Debugger", "Pirate"])
+    mode = st.selectbox("Persona", ["Standard", "Socratic", "Debate Partner", "ELI5", "Code Debugger", "Pirate", "Stoic"])
     st.session_state.mode = mode
     
-    # FOCUS ENGINE (Upgrade 34, 36)
+    # ⏳ FOCUS ENGINE
     st.markdown("---")
     st.subheader("⏳ Focus Engine")
-    focus_min = st.slider("Pomodoro Minutes", 5, 60, 25)
-    if st.button("ACTIVATE FOCUS"):
+    focus_min = st.slider("Focus Minutes", 5, 90, 25)
+    if st.button("ACTIVATE ZEN MODE"):
         st.session_state.focus_active = True
         st.session_state.focus_end = datetime.now() + timedelta(minutes=focus_min)
         st.rerun()
-        
-    # UTILITIES (Upgrade 61, 70, 21)
+
+    # 🧬 LIFE OS
     st.markdown("---")
-    with st.expander("🛠️ Utilities"):
-        tab1, tab2, tab3 = st.tabs(["Calc", "Pass", "GPA"])
-        with tab1:
+    with st.expander("🧬 Life OS"):
+        st.caption("Daily Routine")
+        if st.checkbox("Morning Briefing", value=True): pass
+        st.checkbox("Deep Work Block")
+        
+        st.caption("Habit Tracker")
+        c1, c2, c3 = st.columns(3)
+        with c1: st.session_state.habits["Study"] = st.checkbox("📚", value=st.session_state.habits["Study"])
+        with c2: st.session_state.habits["Workout"] = st.checkbox("💪", value=st.session_state.habits["Workout"])
+        with c3: st.session_state.habits["Read"] = st.checkbox("📖", value=st.session_state.habits["Read"])
+
+    # 🛠️ TOOLKIT
+    st.markdown("---")
+    with st.expander("🛠️ Toolkit"):
+        tool_choice = st.selectbox("Select Tool", ["Calculator", "Password Gen", "GPA Sim", "QR Code", "Randomizer", "Map"])
+        
+        if tool_choice == "Calculator":
             eq = st.text_input("Equation", key="calc_in")
             if eq: 
                 try: st.code(str(eval(eq))) 
                 except: st.error("Error")
-        with tab2:
-            if st.button("Gen Password"):
+                
+        elif tool_choice == "Password Gen":
+            if st.button("Generate"):
                 chars = string.ascii_letters + string.digits + "!@#$%"
-                st.code("".join(random.choice(chars) for i in range(12)))
-        with tab3:
-            st.caption("GPA Simulator")
+                st.code("".join(random.choice(chars) for i in range(16)))
+                
+        elif tool_choice == "GPA Sim":
             current = st.number_input("Current GPA", 0.0, 4.0, 3.5)
             credits = st.number_input("Total Credits", 0, 120, 30)
-            new_grade = st.number_input("New Class Grade (0-4)", 0.0, 4.0, 4.0)
+            new_grade = st.number_input("New Grade", 0.0, 4.0, 4.0)
             if st.button("Simulate"):
-                new_gpa = ((current * credits) + (new_grade * 3)) / (credits + 3)
-                st.success(f"New GPA: {new_gpa:.2f}")
+                st.success(f"New GPA: {((current * credits) + (new_grade * 3)) / (credits + 3):.2f}")
+                
+        elif tool_choice == "QR Code":
+            qr_data = st.text_input("Content to Encode")
+            if qr_data:
+                st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={qr_data}")
+                
+        elif tool_choice == "Randomizer":
+            c1, c2 = st.columns(2)
+            with c1: 
+                if st.button("Roll D20"): st.metric("D20", random.randint(1, 20))
+            with c2:
+                if st.button("Flip Coin"): st.metric("Coin", random.choice(["Heads", "Tails"]))
+                
+        elif tool_choice == "Map":
+            st.map(pd.DataFrame({'lat': [40.7128], 'lon': [-74.0060]}))
 
-    # SECURITY (Upgrade 72, 73)
+    # 🎭 SOUL & SECURITY
+    st.markdown("---")
+    with st.expander("🎭 Soul"):
+        if st.button("Tell me a Joke"):
+            jokes = ["Why did the neural net cross the road? To get to the other dataset.", "I'd tell you a UDP joke, but you might not get it."]
+            st.toast(random.choice(jokes), icon="🤖")
+        if st.button("Motivation"):
+            quotes = ["The only way to do great work is to love what you do.", "Focus is the new IQ."]
+            st.toast(random.choice(quotes), icon="🔥")
+
     st.markdown("---")
     with st.expander("🛡️ Security"):
-        if st.button("Export Chat JSON"):
+        if st.button("Export JSON"):
             json_str = json.dumps(st.session_state.messages, indent=2)
-            st.download_button("Download", json_str, "astra_memory.json", "application/json")
-        if st.button("SELF DESTRUCT (Clear Memory)", type="primary"):
+            st.download_button("Download Memory", json_str, "astra_memory.json", "application/json")
+        if st.button("SELF DESTRUCT", type="primary"):
             st.session_state.messages = []
             st.rerun()
 
-# --- 6. FOCUS MODE OVERLAY ---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 6. FOCUS MODE OVERLAY
+# ═══════════════════════════════════════════════════════════════════════════════
+
 if st.session_state.focus_active:
     now = datetime.now()
     if now < st.session_state.focus_end:
@@ -246,7 +331,10 @@ if st.session_state.focus_active:
         st.session_state.focus_active = False
         st.rerun()
 
-# --- 7. HUD ---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 7. HUD
+# ═══════════════════════════════════════════════════════════════════════════════
+
 event = get_next_event()
 task = get_urgent_task()
 temp, cond = get_weather()
@@ -260,12 +348,15 @@ if task:
 hud_html += f"""<div class="hud-item"><div class="icon-box" style="color:#38bdf8">🌤</div><div><div style="color:white;font-weight:600">{temp}</div><div style="color:#94a3b8;font-size:0.75rem">{LOCATION}</div></div></div></div></div>"""
 st.markdown(hud_html, unsafe_allow_html=True)
 
-# --- 8. MAIN UI ---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 8. MAIN UI
+# ═══════════════════════════════════════════════════════════════════════════════
+
 if not st.session_state.messages:
     st.markdown("""
     <div style="height: 70vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
         <h1 class="astra-logo" style="font-size: 8rem; margin: 0;">ASTRA</h1>
-        <p style="color: #64748b; margin-top: 10px; font-family: monospace; letter-spacing: 2px;">SINGULARITY CORE V9.0</p>
+        <p style="color: #64748b; margin-top: 10px; font-family: monospace; letter-spacing: 2px;">SINGULARITY CORE V9.2</p>
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -273,60 +364,95 @@ else:
         role_class = "user-msg" if m["role"] == "user" else "ai-msg"
         st.markdown(f'<div class="{role_class}">{m["content"]}</div>', unsafe_allow_html=True)
 
-# --- 9. INPUT & INTELLIGENCE ---
+# ═══════════════════════════════════════════════════════════════════════════════
+# 9. INTELLIGENCE ENGINE (SMART BRAIN)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 col1, col2 = st.columns([6, 1])
 with col1:
     prompt = st.chat_input("Command the System...")
 with col2:
-    # Voice Input (Upgrade 51)
     audio_val = st.audio_input("Voice")
 
 if audio_val:
-    # Basic simulation of transcription if API not available, or use Gemini Multimodal later
     st.toast("Voice received. Processing...")
 
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.rerun()
 
+# --- AUTONOMOUS BRIEFING ---
+if not st.session_state.astra_briefing and not st.session_state.messages:
+    # We only run this if chat is empty to start the day
+    grade_data = get_grade_analytics_df()
+    cal_data = str(event['all']) if event else "No events"
+    task_data = str(task['all']) if task else "No urgent tasks"
+    
+    sys_instruction = """Generate an EXECUTIVE BRIEFING. 
+    Format:
+    1. 👑 EXECUTIVE SUMMARY (Top priority item only)
+    2. 🔴 PRIORITY TASKS (Urgent deadlines)
+    3. 🔵 GENERAL UPDATES (Upcoming events/grades)
+    Be concise. No fluff."""
+    
+    try:
+        genai.configure(api_key=GENAI_KEY)
+        model = genai.GenerativeModel('gemini-2.5-pro', system_instruction=sys_instruction)
+        briefing = model.generate_content(f"CONTEXT: Grades={grade_data}, Calendar={cal_data}, Tasks={task_data}").text
+        st.session_state.messages.append({"role": "assistant", "content": briefing})
+        st.session_state.astra_briefing = True
+        st.rerun()
+    except: pass
+
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     last_prompt = st.session_state.messages[-1]["content"]
     
-    # BRAIN CONFIG
+    # 1. BRAIN CONFIG
     genai.configure(api_key=GENAI_KEY)
     
-    # MODE SWITCHING LOGIC
+    # 2. PERSONALITY SELECTOR
     persona = "You are ASTRA, a helpful AI."
-    if st.session_state.mode == "Socratic (Questions Only)": persona = "You are Socrates. NEVER give the answer. Only ask guiding questions to lead the user to the truth."
-    elif st.session_state.mode == "Debate Partner": persona = "You are a ruthless debater. Take the exact opposite stance of the user and provide 3 counter-arguments."
-    elif st.session_state.mode == "ELI5 (Simple)": persona = "Explain everything as if the user is 5 years old. Use simple analogies."
-    elif st.session_state.mode == "Code Debugger": persona = "You are a Senior Engineer. Fix the code provided, explain the bug, and optimize it."
-    elif st.session_state.mode == "Pirate": persona = "You are a space pirate captain. Use appropriate slang."
+    if st.session_state.mode == "Socratic": persona = "You are Socrates. NEVER give the answer. Only ask guiding questions."
+    elif st.session_state.mode == "Debate Partner": persona = "You are a ruthless debater. Counter every argument."
+    elif st.session_state.mode == "ELI5": persona = "Explain simply using analogies."
+    elif st.session_state.mode == "Code Debugger": persona = "You are a Senior Engineer. Fix code and optimize."
+    elif st.session_state.mode == "Pirate": persona = "You are a space pirate captain."
+    elif st.session_state.mode == "Stoic": persona = "You are Marcus Aurelius. Give advice based on Stoic philosophy."
     
-    SYS_PROMPT = f"""{persona}
-    
-    TOOLS & CONTEXT:
-    1. **Deep Research**: If asked to find info, USE the [DEEP WEB DATA].
-    2. **Academic Advisor**: If asked about grades, use [ACADEMIC ANALYTICS].
-    3. **Briefing**: Keep it crisp.
-    4. **Flashcards**: If asked for flashcards, output a CSV format block.
-    5. **Bibliography**: If asked for citations, format in APA7.
+    # 3. CORE RULES (From GAS File)
+    CORE_RULES = """
+    CORE RULES:
+    1. **Agent Oracle**: If user asks "what if" about grades, use the [ACADEMIC DATA] to calculate probabilities. Be analytical.
+    2. **Academic Advisor**: If user asks "how am I doing", analyze the grade breakdown. Look for patterns (e.g. "Good at quizzes, bad at labs").
+    3. **Deep Research**: If asked for info not in your database, use [SEARCH RESULTS]. Synthesize the text; do not just copy it.
+    4. **Proactive**: If you see an assignment due soon, suggest scheduling a study block.
+    5. **Briefing Protocol**: When generating a briefing, prioritize: Executive Summary -> Priority Tasks -> General Updates.
     """
     
-    ctx = ""
-    # Smart Router (Upgrade 8, 22, 23, 24, 26, 49, 50, 89, 90)
-    if any(x in last_prompt.lower() for x in ["search", "find", "research", "news", "learn", "define", "buy", "best"]):
-        ctx += f"\n[DEEP WEB DATA]: {deep_search(last_prompt)}"
+    SYS_PROMPT = f"{persona}\n\n{CORE_RULES}"
     
+    # 4. CONTEXT INJECTION (Smart Data Fetching)
+    ctx = ""
+    # Search
+    if any(x in last_prompt.lower() for x in ["search", "find", "research", "news", "learn", "define", "buy", "best"]):
+        ctx += f"\n[SEARCH RESULTS]: {deep_search(last_prompt)}"
+    
+    # Grades (Basic)
     if any(x in last_prompt.lower() for x in ["grade", "gpa", "score", "pass", "fail", "doing"]):
         df = get_grade_analytics_df()
-        ctx += f"\n[ACADEMIC ANALYTICS]: \n{df.to_string() if not df.empty else 'No data'}"
+        ctx += f"\n[ACADEMIC DATA]: \n{df.to_string() if not df.empty else 'No data'}"
+    
+    # Grades (Detailed "What If")
+    if any(x in last_prompt.lower() for x in ["what if", "needed", "calculate", "hypothetical"]):
+        # Find the course name in the prompt to fetch specific weights
+        ctx += f"\n[DETAILED COURSE DATA]: {get_course_detail(last_prompt)}"
         
+    # Calendar
     if any(x in last_prompt.lower() for x in ["schedule", "calendar", "event", "busy"]):
         ev = get_next_event()
         if ev: ctx += f"\n[CALENDAR]: " + str(ev['all'])
 
-    # Build History
+    # 5. EXECUTION
     chat_history = []
     for msg in st.session_state.messages[:-1]:
         role = "user" if msg["role"] == "user" else "model"
