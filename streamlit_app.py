@@ -157,15 +157,24 @@ def get_academic_audit():
                 e = getattr(c, 'enrollments', [{}])[0]
                 score = e.get('computed_current_score', 0)
                 grade = e.get('computed_current_grade', 'N/A')
-                report.append(f"{c.name}: {score}% ({grade})")
                 
-                # Check Assignments
-                for a in c.get_assignments(bucket='upcoming', limit=3):
-                    if a.due_at:
-                        due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
-                        days = (due - datetime.utcnow()).days
-                        if days < 5:
-                            report.append(f"  -> URGENT: {a.name} due in {days} days")
+                # Flag failing/low grades
+                if score < 75:
+                    status = f"RISK: {c.name} ({score}%)"
+                    
+                    # Check Assignments for this specific risky course
+                    assignments = list(c.get_assignments(bucket='upcoming', limit=3))
+                    if not assignments:
+                        status += " [STATUS: STAGNANT - NO TASKS LOGGED. REQUIRE STUDY PLAN.]"
+                    else:
+                        for a in assignments:
+                            if a.due_at:
+                                due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
+                                days = (due - datetime.utcnow()).days
+                                if days < 5:
+                                    status += f" -> URGENT: {a.name} due in {days} days"
+                    
+                    report.append(status)
             except: continue
         return "\n".join(report) if report else "No active courses/tasks found."
     except: return "Canvas Offline"
@@ -198,7 +207,7 @@ if not st.session_state.astra_init:
     school_status = get_academic_audit()
     
     # Intelligence Check: Only speak if needed
-    if "URGENT" in school_status or cal_status != "Schedule Clear":
+    if "URGENT" in school_status or "RISK" in school_status or cal_status != "Schedule Clear":
         sys_prompt = f"You are ASTRA. The user has just logged in.\n\nSTATUS:\n- Academics: {school_status}\n- Calendar: {cal_status}\n\nTASK: Give a 1-sentence Executive Summary of the biggest threat/priority. Be direct."
         try:
             genai.configure(api_key=GENAI_KEY)
@@ -239,7 +248,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     if any(x in last_prompt.lower() for x in ["search", "find", "who", "what", "where", "news", "learn"]):
         web_context = deep_search(last_prompt)
 
-    # --- SYSTEM PROMPT (v12.1) ---
+    # --- SYSTEM PROMPT (v12.2 - Resourcefulness Patch) ---
     SYS_PROMPT = f"""You are ASTRA, a Context-Aware Neural Interface.
     
     [LIVE USER DATA - DO NOT IGNORE]
@@ -251,7 +260,8 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     1. **Context First**: Never say "I don't know" about the user's life. Look at the LIVE USER DATA above. If the user asks "What should I do?", look for URGENT assignments in the Academics section.
     2. **Ambiguity Handling**: If the user is vague (e.g., "This sucks"), assume they are talking about the hardest item on their schedule or lowest grade.
     3. **Summarization**: Output strict 1-2 paragraph executive summaries. No fluff.
-    4. **Persona**: You are a Chief of Staff. Efficient, low-empathy, high-competence.
+    4. **Resourcefulness**: If academic data is missing (e.g., 0% grade, no tasks logged), DO NOT complain. Fallback to general curriculum standards (e.g., "Since no assignments are logged for AP Human Geography, I recommend reviewing Unit 1: Thinking Geographically. Shall I generate a study guide?").
+    5. **Persona**: You are a Chief of Staff. Efficient, low-empathy, high-competence.
     """
 
     # --- GENERATION ---
