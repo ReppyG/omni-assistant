@@ -202,14 +202,9 @@ if not st.session_state.astra_init:
         sys_prompt = f"You are ASTRA. The user has just logged in.\n\nSTATUS:\n- Academics: {school_status}\n- Calendar: {cal_status}\n\nTASK: Give a 1-sentence Executive Summary of the biggest threat/priority. Be direct."
         try:
             genai.configure(api_key=GENAI_KEY)
-            # Try 3.0 Pro first, then 2.5
-            try:
-                model = genai.GenerativeModel('gemini-3.0-pro')
-                alert = model.generate_content(sys_prompt).text
-            except:
-                model = genai.GenerativeModel('gemini-2.5-flash')
-                alert = model.generate_content(sys_prompt).text
-                
+            # STRICT: Use 2.5 Flash only
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            alert = model.generate_content(sys_prompt).text
             st.session_state.messages.append({"role": "assistant", "content": alert})
             st.rerun()
         except: pass
@@ -260,22 +255,18 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     """
 
     # --- GENERATION ---
-    models_to_try = ['gemini-3.0-pro', 'gemini-2.5-pro', 'gemini-2.5-flash']
     reply = "Neural Link Severed."
     
-    for model_name in models_to_try:
-        try:
-            genai.configure(api_key=GENAI_KEY)
-            model = genai.GenerativeModel(model_name, system_instruction=SYS_PROMPT)
-            history = [{"role": ("user" if m["role"]=="user" else "model"), "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
-            chat = model.start_chat(history=history)
-            response = chat.send_message(last_prompt)
-            reply = response.text
-            break 
-        except Exception as e:
-            if "429" in str(e): continue 
-            reply = f"Neural Link Unstable: {str(e)}"
-            break 
+    try:
+        genai.configure(api_key=GENAI_KEY)
+        # STRICT: Use 2.5 Flash only
+        model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYS_PROMPT)
+        history = [{"role": ("user" if m["role"]=="user" else "model"), "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
+        chat = model.start_chat(history=history)
+        response = chat.send_message(last_prompt)
+        reply = response.text
+    except Exception as e:
+        reply = f"Neural Link Unstable: {str(e)}"
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.rerun()
