@@ -328,7 +328,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
         response = chat.send_message(f"LIVE DATA STREAM: {ctx}\n\nUSER INPUT: {last_prompt}")
         reply = response.text
     except Exception as e:
-        reply = "Neural Link Unstable."
+        reply = f"Neural Link Unstable: {str(e)}"
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.rerun()
