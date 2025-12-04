@@ -8,10 +8,11 @@ from datetime import datetime, timedelta
 import requests
 import json
 
-# --- A.P.E.X. UI CONFIGURATION ---
-st.set_page_config(page_title="O.M.N.I. COMMAND", page_icon="🟣", layout="wide")
+# --- A.P.E.X. CONFIGURATION ---
+st.set_page_config(page_title="O.M.N.I.", page_icon="🟣", layout="wide")
+WEATHER_LOCATION = "Mount Pleasant, SC"  # Hardcoded for accuracy
 
-# CORE STYLE: Glassmorphism & Neon
+# --- STEALTH UI CSS (Auto-Slide Logic) ---
 st.markdown("""
 <style>
     /* Global Reset */
@@ -24,32 +25,44 @@ st.markdown("""
         font-family: 'Courier New'; letter-spacing: 1px;
     }
     
-    /* The HUD Container */
-    .hud-container {
-        display: flex; justify-content: space-between; gap: 10px;
-        padding: 15px; margin-bottom: 20px;
-        background: rgba(20, 20, 20, 0.6);
-        border: 1px solid #333; border-radius: 12px;
-        backdrop-filter: blur(10px);
+    /* TRIGGER ZONE: Invisible strip at top of screen */
+    .hud-trigger {
+        position: fixed; top: 0; left: 0; width: 100%; height: 15px; z-index: 10000;
     }
     
-    /* HUD Cards */
+    /* HUD CONTAINER: Hidden by default (Top -100px) */
+    .hud-container {
+        position: fixed; top: -120px; left: 0; width: 100%; height: 100px;
+        display: flex; justify-content: center; gap: 15px;
+        padding: 10px; z-index: 9999;
+        background: rgba(10, 10, 10, 0.9);
+        border-bottom: 1px solid #333;
+        backdrop-filter: blur(15px);
+        transition: top 0.4s ease-in-out; /* Smooth Slide Animation */
+    }
+    
+    /* SLIDE DOWN ACTION */
+    .hud-trigger:hover + .hud-container, .hud-container:hover {
+        top: 0;
+    }
+    
+    /* CARDS */
     .hud-card {
-        flex: 1; padding: 10px;
-        border-left: 2px solid #333;
-        background: rgba(255, 255, 255, 0.03);
+        width: 250px; padding: 8px 12px;
+        border-left: 3px solid #333;
+        background: rgba(255, 255, 255, 0.02);
+        display: flex; flex-direction: column; justify-content: center;
     }
     .hud-card.neon-purple { border-left-color: #a855f7; }
-    .hud-card.neon-cyan { border-left-color: #00ffcc; }
     .hud-card.neon-red { border-left-color: #ff3366; }
+    .hud-card.neon-cyan { border-left-color: #00ffcc; }
     
-    .hud-label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 2px; }
-    .hud-value { font-size: 1.1rem; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .hud-sub { font-size: 0.8rem; color: #666; }
+    .hud-label { font-size: 0.65rem; color: #777; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px; }
+    .hud-value { font-size: 0.9rem; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hud-sub { font-size: 0.75rem; color: #555; }
 
-    /* Hide Streamlit Cruft */
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-    div[data-testid="stStatusWidget"] {visibility: hidden;}
+    /* Hide Streamlit Elements */
+    #MainMenu, footer, header, div[data-testid="stStatusWidget"] {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -67,13 +80,14 @@ except:
     st.error("CRITICAL: Secrets Missing.")
     st.stop()
 
-# --- INTELLIGENCE FETCHERS (Cached for Speed) ---
+# --- INTELLIGENCE FETCHERS ---
 
-@st.cache_data(ttl=300) # Cache for 5 mins to prevent API spam
+@st.cache_data(ttl=600)
 def get_weather():
     try:
-        # Simple text-based weather
-        r = requests.get("https://wttr.in/?format=3")
+        # Use hardcoded location for accuracy
+        loc_formatted = WEATHER_LOCATION.replace(" ", "+")
+        r = requests.get(f"https://wttr.in/{loc_formatted}?format=%C+%t")
         return r.text.strip()
     except: return "Link Offline"
 
@@ -86,14 +100,13 @@ def get_next_calendar_event():
         service = build('calendar', 'v3', credentials=creds)
         now = datetime.utcnow().isoformat() + 'Z'
         events = service.events().list(calendarId='primary', timeMin=now, maxResults=1, singleEvents=True, orderBy='startTime').execute().get('items', [])
-        if not events: return ("NO EVENTS", "Clear Schedule")
+        if not events: return None
         
         ev = events[0]
         start = ev['start'].get('dateTime', ev['start'].get('date'))
-        # Simple date formatting
         try:
             dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
-            time_str = dt.strftime("%I:%M %p")
+            time_str = dt.strftime("%I:%M %p") # e.g. 02:30 PM
         except: time_str = start
         return (ev['summary'], time_str)
     except: return ("AUTH ERROR", "Check Token")
@@ -102,28 +115,25 @@ def get_top_canvas_task():
     try:
         canvas = Canvas(CANVAS_URL, CANVAS_KEY)
         user = canvas.get_current_user()
-        courses = user.get_courses(enrollment_state='active')
         
         soonest_task = None
         soonest_date = None
         
-        for course in courses:
+        for course in user.get_courses(enrollment_state='active'):
             try:
-                # Get assignments due in next 7 days
-                assignments = course.get_assignments(bucket='upcoming', limit=3)
-                for a in assignments:
+                for a in course.get_assignments(bucket='upcoming', limit=3):
                     if a.due_at:
                         due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
                         if soonest_date is None or due < soonest_date:
                             soonest_date = due
-                            soonest_task = f"{a.name}"
+                            soonest_task = a.name
             except: continue
             
         if soonest_task:
             days_left = (soonest_date - datetime.utcnow()).days
-            time_str = "Today" if days_left == 0 else f"In {days_left} Days"
+            time_str = "Due Today" if days_left <= 0 else f"Due in {days_left} Days"
             return (soonest_task, time_str)
-        return ("ALL CLEAR", "No Assignments")
+        return None
     except: return ("CANVAS ERROR", "Check Token")
 
 # --- TOOLKIT FOR AI ---
@@ -145,33 +155,47 @@ def add_calendar_event(summary, start_time_str):
         return f"Scheduled: {summary}"
     except Exception as e: return f"Error: {e}"
 
-# --- RENDER HEADS-UP DISPLAY (HUD) ---
-# Fetch Data
-with st.spinner("Syncing Command Center..."):
-    cal_title, cal_time = get_next_calendar_event()
-    can_title, can_time = get_top_canvas_task()
-    weather_info = get_weather()
+# --- RENDER HEADS-UP DISPLAY (CONDITIONAL) ---
+cal_data = get_next_calendar_event()
+can_data = get_top_canvas_task()
+weather_info = get_weather()
 
-# Render HTML HUD
-st.markdown(f"""
-<div class="hud-container">
-    <div class="hud-card neon-purple">
-        <div class="hud-label">CALENDAR UPLINK</div>
-        <div class="hud-value">{cal_title}</div>
-        <div class="hud-sub">{cal_time}</div>
-    </div>
-    <div class="hud-card neon-red">
-        <div class="hud-label">CANVAS TARGET</div>
-        <div class="hud-value">{can_title}</div>
-        <div class="hud-sub">{can_time}</div>
-    </div>
+# Only render if there is data OR auth error
+if cal_data or can_data:
+    # Build HTML components based on what exists
+    cards_html = ""
+    
+    if cal_data:
+        cards_html += f"""
+        <div class="hud-card neon-purple">
+            <div class="hud-label">NEXT EVENT</div>
+            <div class="hud-value">{cal_data[0]}</div>
+            <div class="hud-sub">{cal_data[1]}</div>
+        </div>"""
+        
+    if can_data:
+        cards_html += f"""
+        <div class="hud-card neon-red">
+            <div class="hud-label">PRIORITY TASK</div>
+            <div class="hud-value">{can_data[0]}</div>
+            <div class="hud-sub">{can_data[1]}</div>
+        </div>"""
+        
+    # Always show weather if other cards exist
+    cards_html += f"""
     <div class="hud-card neon-cyan">
-        <div class="hud-label">ENVIRONMENT</div>
+        <div class="hud-label">{WEATHER_LOCATION.upper()}</div>
         <div class="hud-value">{weather_info}</div>
-        <div class="hud-sub">Local Sector</div>
+        <div class="hud-sub">Local Intel</div>
+    </div>"""
+
+    # Inject Sliding Mechanism
+    st.markdown(f"""
+    <div class="hud-trigger"></div>
+    <div class="hud-container">
+        {cards_html}
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # --- CHAT ENGINE ---
 genai.configure(api_key=GENAI_KEY)
@@ -193,18 +217,16 @@ if prompt := st.chat_input("Direct the Intelligence..."):
     with st.chat_message("user"): st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Quick Context Grab
-        ctx = f"HUD DATA -> Calendar: {cal_title} at {cal_time} | Canvas: {can_title} due {can_time} | Weather: {weather_info}"
+        # Context Construction
+        ctx = f"STATUS -> Weather: {weather_info}"
+        if cal_data: ctx += f" | Next Event: {cal_data[0]} at {cal_data[1]}"
+        if can_data: ctx += f" | Due Task: {can_data[0]} ({can_data[1]})"
         
-        # Search if needed
         if "search" in prompt.lower() or "find" in prompt.lower():
             ctx += f"\nSEARCH DATA: {google_search(prompt)}"
         
-        # Schedule if needed
         if "schedule" in prompt.lower():
-            # Heuristic scheduling for simplicity in single-file
             try:
-                # Default to tomorrow 5pm if fuzzy
                 next_day = (datetime.now() + timedelta(days=1)).replace(hour=17, minute=0, second=0).isoformat()
                 res = add_calendar_event("O.M.N.I. Task", next_day)
                 ctx += f"\nACTION: {res}"
