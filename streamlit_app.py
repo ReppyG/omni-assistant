@@ -39,7 +39,7 @@ except:
     st.stop()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 2. VISUAL CORE (The Void - Fixes Applied)
+# 2. VISUAL CORE (The Void)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 st.markdown("""
@@ -56,22 +56,17 @@ st.markdown("""
     /* LAYOUT CLEANUP */
     .block-container { 
         padding-top: 2rem !important; 
-        padding-bottom: 8rem !important; /* Increased for input spacing */
+        padding-bottom: 8rem !important; 
         max-width: 800px !important; 
         margin: 0 auto; 
     }
     
-    /* HIDE ALL UI CRUFT */
+    /* HIDE CRUFT */
     #MainMenu, footer, header, div[data-testid="stStatusWidget"], section[data-testid="stSidebar"] { 
         display: none !important; 
         visibility: hidden !important; 
     }
     .stSpinner { display: none !important; }
-    
-    /* Ensure Markdown is Visible */
-    .stMarkdown {
-        width: 100% !important;
-    }
     
     /* LOGO */
     .astra-logo {
@@ -87,62 +82,38 @@ st.markdown("""
         filter: drop-shadow(0 0 20px rgba(160, 32, 240, 0.3));
         animation: pulse 4s infinite;
     }
-    
     @keyframes pulse { 0% { opacity: 0.9; } 50% { opacity: 1; } 100% { opacity: 0.9; } }
 
-    /* CHAT BUBBLES - High Visibility */
+    /* CHAT BUBBLES */
     .user-msg {
         background-color: #27272a !important;
         color: #ffffff !important;
         padding: 12px 20px;
         border-radius: 20px 20px 4px 20px;
-        margin-left: auto; 
-        width: fit-content; 
-        max-width: 80%;
-        margin-bottom: 12px; 
-        font-weight: 500;
-        display: block;
-        position: relative;
+        margin-left: auto; width: fit-content; max-width: 80%;
+        margin-bottom: 12px; font-weight: 500;
+        display: block; position: relative;
     }
-    
     .ai-msg {
         background: linear-gradient(135deg, #3B0764, #581C87) !important;
         color: #ffffff !important;
         padding: 14px 24px;
         border-radius: 20px 20px 24px 4px;
-        margin-right: auto; 
-        width: fit-content; 
-        max-width: 85%;
-        margin-bottom: 12px; 
-        box-shadow: 0 4px 15px rgba(88, 28, 135, 0.15);
+        margin-right: auto; width: fit-content; max-width: 85%;
+        margin-bottom: 12px; box-shadow: 0 4px 15px rgba(88, 28, 135, 0.15);
         line-height: 1.5;
-        display: block;
-        position: relative;
+        display: block; position: relative;
     }
 
     /* INPUT */
-    .stChatInput { 
-        position: fixed; 
-        bottom: 30px; 
-        left: 50%; 
-        transform: translateX(-50%); 
-        width: 100%; 
-        max-width: 800px; 
-        z-index: 10000; /* Ensure on top */
-    }
-    .stChatInput > div { 
-        background-color: #121212 !important; 
-        border: 1px solid #27272a !important; 
-        border-radius: 30px !important; 
-    }
-    .stChatInput input { 
-        color: #ffffff !important; 
-    }
+    .stChatInput { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 800px; z-index: 10000; }
+    .stChatInput > div { background-color: #121212 !important; border: 1px solid #27272a !important; border-radius: 30px !important; }
+    .stChatInput input { color: #ffffff !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3. THE PROACTIVE BRAIN (Hidden Logic)
+# 3. BACKEND INTELLIGENCE (Always-On Awareness)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data(ttl=900)
@@ -156,58 +127,48 @@ def get_weather():
 def get_google_creds():
     return Credentials(None, refresh_token=REFRESH_TOKEN, token_uri="https://oauth2.googleapis.com/token", client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
 
+# CACHED TO PREVENT LAG, BUT ALWAYS ACCESSIBLE
+@st.cache_data(ttl=300) 
 def get_calendar_audit():
-    """Scans calendar for conflicts and density."""
     try:
         creds = get_google_creds()
         service = build('calendar', 'v3', credentials=creds)
         now = datetime.utcnow().isoformat() + 'Z'
-        events = service.events().list(calendarId='primary', timeMin=now, maxResults=10, singleEvents=True, orderBy='startTime').execute().get('items', [])
-        
+        events = service.events().list(calendarId='primary', timeMin=now, maxResults=5, singleEvents=True, orderBy='startTime').execute().get('items', [])
         if not events: return "Schedule Clear"
         
-        # Analyze density
-        today_events = [e for e in events if e['start'].get('dateTime', '').startswith(datetime.now().strftime('%Y-%m-%d'))]
-        if len(today_events) > 4: return f"HIGH LOAD: {len(today_events)} events today."
-        
-        # Next event
-        next_ev = events[0]
-        summary = next_ev.get('summary', 'Event')
-        start = next_ev['start'].get('dateTime', next_ev['start'].get('date'))
-        return f"Next: {summary} at {start}"
-    except: return "Calendar Link Severed"
+        summary = []
+        for e in events:
+            dt = e['start'].get('dateTime', e['start'].get('date'))
+            summary.append(f"{e['summary']} ({dt})")
+        return "; ".join(summary)
+    except: return "Calendar Offline"
 
+@st.cache_data(ttl=300)
 def get_academic_audit():
-    """Scans for grade drops and imminent deadlines."""
     try:
         canvas = Canvas(CANVAS_URL, CANVAS_KEY)
         user = canvas.get_current_user()
         
-        alerts = []
-        
-        # Check Deadlines (Next 48 Hours)
-        for c in user.get_courses(enrollment_state='active'):
-            try:
-                for a in c.get_assignments(bucket='upcoming', limit=5):
-                    if a.due_at:
-                        due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
-                        if (due - datetime.utcnow()).days < 2:
-                            alerts.append(f"URGENT: {a.name} due in {(due - datetime.utcnow()).seconds//3600}h")
-            except: continue
-            
-        # Check Grades (Identify Struggling Classes)
-        grades = []
+        report = []
+        # Check Grades
         for c in user.get_courses(enrollment_state='active', include=['total_scores']):
             try:
                 e = getattr(c, 'enrollments', [{}])[0]
-                score = e.get('computed_current_score', 100)
-                if score and score < 75:
-                    grades.append(f"RISK: {c.name} is at {score}%")
+                score = e.get('computed_current_score', 0)
+                grade = e.get('computed_current_grade', 'N/A')
+                report.append(f"{c.name}: {score}% ({grade})")
+                
+                # Check Assignments
+                for a in c.get_assignments(bucket='upcoming', limit=3):
+                    if a.due_at:
+                        due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
+                        days = (due - datetime.utcnow()).days
+                        if days < 5:
+                            report.append(f"  -> URGENT: {a.name} due in {days} days")
             except: continue
-            
-        if not alerts and not grades: return "Academic Status: Optimal"
-        return " | ".join(alerts[:3] + grades[:2])
-    except: return "Canvas Link Severed"
+        return "\n".join(report) if report else "No active courses/tasks found."
+    except: return "Canvas Offline"
 
 def deep_search(query):
     try:
@@ -217,13 +178,13 @@ def deep_search(query):
     except: return "Search Offline"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. STARTUP SEQUENCE (The "Agent" Logic)
+# 4. STARTUP & CHAT LOOP
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if "messages" not in st.session_state: st.session_state.messages = []
 if "astra_init" not in st.session_state: st.session_state.astra_init = False
 
-# --- LANDING SCREEN (Empty State) ---
+# --- LANDING SCREEN ---
 if not st.session_state.messages:
     st.markdown("""
     <div style="height: 70vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
@@ -231,36 +192,17 @@ if not st.session_state.messages:
     </div>
     """, unsafe_allow_html=True)
 
-# --- PROACTIVE SCANNER (Runs Once on Boot) ---
+# --- PROACTIVE BRIEFING ---
 if not st.session_state.astra_init:
-    # 1. Silent Scan
     cal_status = get_calendar_audit()
     school_status = get_academic_audit()
-    weather = get_weather()
     
-    # 2. Decision Matrix: Does the user NEED to be alerted?
-    # If there is "URGENT", "RISK", or "HIGH LOAD", the AI speaks first.
-    if "URGENT" in school_status or "RISK" in school_status or "HIGH LOAD" in cal_status:
-        
-        sys_prompt = """You are ASTRA, a proactive executive AI.
-        You have just scanned the user's data.
-        
-        DATA:
-        - Calendar: {cal}
-        - School: {school}
-        - Weather: {wx}
-        
-        TASK:
-        The user has just opened the app. 
-        Do NOT say "Hello". 
-        IMMEDIATELY brief them on the threat/risk detected in the data.
-        Be concise, serious, and strategic. Propose a fix.
-        """.format(cal=cal_status, school=school_status, wx=weather)
-        
+    # Intelligence Check: Only speak if needed
+    if "URGENT" in school_status or cal_status != "Schedule Clear":
+        sys_prompt = f"You are ASTRA. The user has just logged in.\n\nSTATUS:\n- Academics: {school_status}\n- Calendar: {cal_status}\n\nTASK: Give a 1-sentence Executive Summary of the biggest threat/priority. Be direct."
         try:
             genai.configure(api_key=GENAI_KEY)
-            # Try Pro first, fallback handled if this part crashes
-            model = genai.GenerativeModel('gemini-2.5-flash') 
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
             alert = model.generate_content(sys_prompt).text
             st.session_state.messages.append({"role": "assistant", "content": alert})
             st.rerun()
@@ -268,66 +210,66 @@ if not st.session_state.astra_init:
     
     st.session_state.astra_init = True
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 5. CHAT LOOP
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Display History
+# --- CHAT UI ---
 chat_container = st.container()
 with chat_container:
     for m in st.session_state.messages:
         role_class = "user-msg" if m["role"] == "user" else "ai-msg"
         st.markdown(f'<div class="{role_class}">{m["content"]}</div>', unsafe_allow_html=True)
 
-# Input
 if prompt := st.chat_input("Command..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.rerun()
 
-# Logic
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5. THE INTELLIGENCE CORE (Fixed Context Logic)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     last_prompt = st.session_state.messages[-1]["content"]
     
-    # --- DYNAMIC INTELLIGENCE ---
-    ctx = ""
-    lp = last_prompt.lower()
+    # --- UNIVERSAL CONTEXT (The Fix) ---
+    # We fetch these EVERY time so the AI is never "blind"
+    cal_context = get_calendar_audit()
+    acad_context = get_academic_audit()
     
-    if any(x in lp for x in ["search", "find", "who", "what", "where", "news"]):
-        ctx += f"\n[SEARCH PROTOCOL]: {deep_search(last_prompt)}"
-    if any(x in lp for x in ["schedule", "calendar", "busy", "free", "tomorrow", "today"]):
-        ctx += f"\n[CALENDAR PROTOCOL]: {get_calendar_audit()}"
-    if any(x in lp for x in ["due", "grade", "score", "assignment", "test", "exam"]):
-        ctx += f"\n[ACADEMIC PROTOCOL]: {get_academic_audit()}"
+    # Optional Search (Only if needed to save tokens/latency)
+    web_context = ""
+    if any(x in last_prompt.lower() for x in ["search", "find", "who", "what", "where", "news", "learn"]):
+        web_context = deep_search(last_prompt)
 
-    SYS_PROMPT = """You are ASTRA. Neural Interface.
+    # --- SYSTEM PROMPT (v12.1) ---
+    SYS_PROMPT = f"""You are ASTRA, a Context-Aware Neural Interface.
+    
+    [LIVE USER DATA - DO NOT IGNORE]
+    CALENDAR: {cal_context}
+    ACADEMICS: {acad_context}
+    WEB SEARCH: {web_context}
+    
     DIRECTIVES:
-    1. **Efficiency**: Use minimum words for maximum impact.
-    2. **Proactivity**: If schedule is heavy, suggest rescheduling.
-    3. **Strategy**: If grades are low, suggest study topics.
-    4. **Summarization**: ALWAYS condense findings into 1-2 paragraph summaries. No walls of text.
+    1. **Context First**: Never say "I don't know" about the user's life. Look at the LIVE USER DATA above. If the user asks "What should I do?", look for URGENT assignments in the Academics section.
+    2. **Ambiguity Handling**: If the user is vague (e.g., "This sucks"), assume they are talking about the hardest item on their schedule or lowest grade.
+    3. **Summarization**: Output strict 1-2 paragraph executive summaries. No fluff.
+    4. **Persona**: You are a Chief of Staff. Efficient, low-empathy, high-competence.
     """
 
-    # --- FALLBACK GENERATION LOGIC ---
-    models_to_try = ['gemini-2.5-pro', 'gemini-2.5-flash']
+    # --- GENERATION ---
+    models_to_try = ['gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.5-flash']
     reply = "Neural Link Severed."
     
     for model_name in models_to_try:
         try:
             genai.configure(api_key=GENAI_KEY)
             model = genai.GenerativeModel(model_name, system_instruction=SYS_PROMPT)
-            
             history = [{"role": ("user" if m["role"]=="user" else "model"), "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
             chat = model.start_chat(history=history)
-            
-            response = chat.send_message(f"LIVE DATA STREAM: {ctx}\n\nUSER INPUT: {last_prompt}")
+            response = chat.send_message(last_prompt)
             reply = response.text
-            break # Success, exit loop
+            break 
         except Exception as e:
-            if "429" in str(e):
-                continue # Try next model
+            if "429" in str(e): continue 
             reply = f"Neural Link Unstable: {str(e)}"
-            break # Non-quota error, stop trying
+            break 
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.rerun()
-    
