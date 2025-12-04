@@ -2,3 +2,5 @@ streamlit
 google-generativeai
 canvasapi
 google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
