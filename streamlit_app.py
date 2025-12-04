@@ -97,7 +97,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3. BACKEND INTELLIGENCE (v14.0 - The Neural Link)
+# 3. BACKEND INTELLIGENCE (v14.5 - Deep Harvest)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data(ttl=900)
@@ -114,9 +114,10 @@ def get_google_creds():
 def strip_html(html_content):
     if not html_content: return ""
     soup = BeautifulSoup(html_content, "html.parser")
-    return soup.get_text(separator=" ", strip=True)[:1000] # Limit chunk size
+    # Get text with separators to preserve some structure
+    return soup.get_text(separator=" ", strip=True)[:3000] # Harvest up to 3000 chars
 
-# --- ACADEMIC ENGINE (Canvas v7.1 Parity) ---
+# --- ACADEMIC ENGINE (Deep Harvest) ---
 @st.cache_data(ttl=300)
 def get_academic_audit():
     try:
@@ -126,64 +127,76 @@ def get_academic_audit():
         audit_log = []
         syllabus_context = []
         
+        # Include 'term' to potentially filter by current term if needed, and syllabus
         courses = user.get_courses(enrollment_state='active', include=['total_scores', 'syllabus_body', 'teachers'])
         
         for c in courses:
             try:
-                # 1. METADATA & PROFESSOR
                 course_name = c.name
-                prof_name = "Unknown"
-                # Try to find teacher (API varying support)
-                if hasattr(c, 'teachers') and c.teachers:
-                    prof_name = c.teachers[0]['display_name']
                 
-                # 2. GRADES (Intervention Agent)
+                # 1. GRADES
                 e = getattr(c, 'enrollments', [{}])[0]
                 score = e.get('computed_current_score', 0)
                 grade_status = f"{score}%"
-                if score < 80: 
-                    grade_status += f" [ALERT: INTERVENTION NEEDED - Prof. {prof_name}]"
                 
-                # 3. ASSIGNMENTS (Categorization Engine)
-                assignments = list(c.get_assignments(bucket='upcoming', limit=3))
+                # 2. DEEP ASSIGNMENT SCAN
+                # We fetch more assignments to ensure we find everything
+                assignments = list(c.get_assignments(bucket='upcoming', limit=5))
                 overdue = list(c.get_assignments(bucket='past', limit=5))
                 
-                missing_tasks = []
+                active_tasks = []
+                
+                # Process Upcoming Assignments - EXTRACT DESCRIPTIONS
+                for a in assignments:
+                    # Harvest Description
+                    desc_text = strip_html(getattr(a, 'description', ''))
+                    if desc_text:
+                        syllabus_context.append(f"[ASSIGNMENT DETAIL: {course_name} - {a.name}]: {desc_text}")
+                    
+                    if hasattr(a, 'due_at') and a.due_at:
+                        due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
+                        days = (due - datetime.utcnow()).days
+                        if days < 7:
+                            active_tasks.append(f"{a.name} ({days}d)")
+
+                # Process Overdue - EXTRACT DESCRIPTIONS
+                missing_count = 0
                 for a in overdue:
                     if hasattr(a, 'due_at') and a.due_at:
                         due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
                         if (datetime.utcnow() - due).days > 0 and not a.has_submitted_submissions:
-                            missing_tasks.append(a.name)
-                            
-                task_status = ""
-                if missing_tasks: 
-                    task_status = f"MISSING: {', '.join(missing_tasks[:2])}"
-                elif assignments:
-                    next_a = assignments[0]
-                    task_status = f"NEXT: {next_a.name} ({next_a.due_at})"
-                else:
-                    task_status = "Status: Idle"
+                            missing_count += 1
+                            # Add overdue description to RAG too
+                            desc_text = strip_html(getattr(a, 'description', ''))
+                            if desc_text:
+                                syllabus_context.append(f"[MISSING ASSIGNMENT DETAIL: {course_name} - {a.name}]: {desc_text}")
 
-                # 4. SYLLABUS & ANNOUNCEMENTS (Instant RAG)
-                # Store syllabus snippets for context injection
+                # 3. SYLLABUS & ANNOUNCEMENTS
                 if hasattr(c, 'syllabus_body') and c.syllabus_body:
                     clean_syl = strip_html(c.syllabus_body)
-                    syllabus_context.append(f"[{course_name} POLICY]: {clean_syl[:500]}...")
+                    syllabus_context.append(f"[{course_name} SYLLABUS]: {clean_syl}")
                 
-                # Fetch recent announcements
-                anns = c.get_discussion_topics(only_announcements=True, limit=1)
+                # Harvest Announcements BODIES
+                anns = c.get_discussion_topics(only_announcements=True, limit=3)
                 for a in anns:
-                    syllabus_context.append(f"[{course_name} ANNOUNCEMENT]: {a.title}")
+                    ann_body = strip_html(getattr(a, 'message', ''))
+                    syllabus_context.append(f"[{course_name} ANNOUNCEMENT: {a.title}]: {ann_body}")
 
-                audit_log.append(f"{course_name} | Grade: {grade_status} | {task_status}")
+                # 4. STATUS SUMMARY
+                status = f"{course_name}: {grade_status}"
+                if missing_count > 0: status += f" | {missing_count} MISSING"
+                if active_tasks: status += f" | NEXT: {', '.join(active_tasks[:3])}"
+                
+                audit_log.append(status)
                 
             except: continue
             
         full_report = "\n".join(audit_log) if audit_log else "No active data."
-        rag_data = "\n".join(syllabus_context)
+        # Join with double newline for clarity in context
+        rag_data = "\n\n".join(syllabus_context) 
         return full_report, rag_data
         
-    except: return "Canvas Offline", ""
+    except Exception as e: return f"Canvas Offline: {str(e)}", ""
 
 @st.cache_data(ttl=300) 
 def get_calendar_audit():
@@ -228,8 +241,7 @@ if not st.session_state.astra_init:
     school_report, school_rag = get_academic_audit()
     cal_status = get_calendar_audit()
     
-    # Intelligence Check: Speak if intervention needed
-    if "ALERT" in school_report or "MISSING" in school_report or "High Load" in cal_status:
+    if "ALERT" in school_report or "MISSING" in school_report or cal_status != "Schedule Clear":
         sys_prompt = f"""You are ASTRA. Proactive Briefing.
         
         [LIVE DATA]
@@ -263,7 +275,7 @@ if prompt := st.chat_input("Command..."):
     st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 5. THE OMNIPOTENT BRAIN (v14.0)
+# 5. THE OMNIPOTENT BRAIN (v14.5)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
@@ -277,20 +289,21 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     if any(x in last_prompt.lower() for x in ["search", "find", "who", "what", "where", "news", "learn"]):
         web_context = deep_search(last_prompt)
 
-    # --- SYSTEM PROMPT (v14.0 - The Neural Link) ---
+    # --- SYSTEM PROMPT (v14.5 - Deep Harvest) ---
     SYS_PROMPT = f"""You are ASTRA, a Context-Aware Neural Interface.
     
     [LIVE DATA STREAM]
     CALENDAR: {cal_context}
     ACADEMIC REPORT: {school_report}
-    SYLLABUS/POLICY RAG: {school_rag}
+    DETAILED COURSE CONTENT (RAG):
+    {school_rag}
     WEB SEARCH: {web_context}
     
     CORE RULES (STRICT):
-    1. **Syllabus Engine**: If user asks about policies ("late work", "grading"), CHECK THE SYLLABUS RAG above first.
-    2. **Intervention Agent**: If grades are marked ALERT, suggest: "Shall I draft an email to the professor?"
-    3. **Missing Work**: If tasks are MISSING, prioritize them over everything else.
-    4. **Proactive**: Never say "I don't know" if the data is in the stream.
+    1. **Data Harvest**: I have provided the FULL TEXT of assignments and announcements above in 'DETAILED COURSE CONTENT'. READ IT before saying "data not available".
+    2. **Resourcefulness**: If specific instructions are missing even after the harvest, extrapolate based on the course name and assignment title (e.g., "AP Human Geography Agriculture" implies reviewing the Von Thunen model or Green Revolution).
+    3. **Syllabus Engine**: Use the provided syllabus text to answer policy questions.
+    4. **Intervention Agent**: If grades are marked ALERT, suggest: "Shall I draft an email to the professor?"
     5. **Output**: Max 1-2 paragraphs. Synthesize.
     """
 
