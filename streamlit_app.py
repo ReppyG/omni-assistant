@@ -39,7 +39,7 @@ except:
     st.stop()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 2. VISUAL CORE (The Void)
+# 2. VISUAL CORE (The Void - Fixes Applied)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 st.markdown("""
@@ -47,10 +47,31 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Knewave&family=Inter:wght@400;500;600&display=swap');
     
     /* GLOBAL THEME */
-    .stApp { background-color: #000000 !important; font-family: 'Inter', sans-serif; color: #ffffff; }
-    .block-container { padding-top: 2rem !important; padding-bottom: 6rem !important; max-width: 800px !important; margin: 0 auto; }
-    #MainMenu, footer, header, div[data-testid="stStatusWidget"], section[data-testid="stSidebar"] { display: none !important; }
+    .stApp { 
+        background-color: #000000 !important; 
+        font-family: 'Inter', sans-serif; 
+        color: #ffffff !important;
+    }
+    
+    /* LAYOUT CLEANUP */
+    .block-container { 
+        padding-top: 2rem !important; 
+        padding-bottom: 8rem !important; /* Increased for input spacing */
+        max-width: 800px !important; 
+        margin: 0 auto; 
+    }
+    
+    /* HIDE ALL UI CRUFT */
+    #MainMenu, footer, header, div[data-testid="stStatusWidget"], section[data-testid="stSidebar"] { 
+        display: none !important; 
+        visibility: hidden !important; 
+    }
     .stSpinner { display: none !important; }
+    
+    /* Ensure Markdown is Visible */
+    .stMarkdown {
+        width: 100% !important;
+    }
     
     /* LOGO */
     .astra-logo {
@@ -69,30 +90,54 @@ st.markdown("""
     
     @keyframes pulse { 0% { opacity: 0.9; } 50% { opacity: 1; } 100% { opacity: 0.9; } }
 
-    /* CHAT BUBBLES */
+    /* CHAT BUBBLES - High Visibility */
     .user-msg {
-        background-color: #27272a;
-        color: #e4e4e7;
+        background-color: #27272a !important;
+        color: #ffffff !important;
         padding: 12px 20px;
         border-radius: 20px 20px 4px 20px;
-        margin-left: auto; width: fit-content; max-width: 80%;
-        margin-bottom: 12px; font-weight: 500;
+        margin-left: auto; 
+        width: fit-content; 
+        max-width: 80%;
+        margin-bottom: 12px; 
+        font-weight: 500;
+        display: block;
+        position: relative;
     }
     
     .ai-msg {
-        background: linear-gradient(135deg, #3B0764, #581C87);
-        color: #f3e8ff;
+        background: linear-gradient(135deg, #3B0764, #581C87) !important;
+        color: #ffffff !important;
         padding: 14px 24px;
         border-radius: 20px 20px 24px 4px;
-        margin-right: auto; width: fit-content; max-width: 85%;
-        margin-bottom: 12px; box-shadow: 0 4px 15px rgba(88, 28, 135, 0.15);
+        margin-right: auto; 
+        width: fit-content; 
+        max-width: 85%;
+        margin-bottom: 12px; 
+        box-shadow: 0 4px 15px rgba(88, 28, 135, 0.15);
         line-height: 1.5;
+        display: block;
+        position: relative;
     }
 
     /* INPUT */
-    .stChatInput { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 800px; z-index: 1000; }
-    .stChatInput > div { background-color: #121212 !important; border: 1px solid #27272a !important; border-radius: 30px !important; }
-    .stChatInput input { color: #e4e4e7 !important; }
+    .stChatInput { 
+        position: fixed; 
+        bottom: 30px; 
+        left: 50%; 
+        transform: translateX(-50%); 
+        width: 100%; 
+        max-width: 800px; 
+        z-index: 10000; /* Ensure on top */
+    }
+    .stChatInput > div { 
+        background-color: #121212 !important; 
+        border: 1px solid #27272a !important; 
+        border-radius: 30px !important; 
+    }
+    .stChatInput input { 
+        color: #ffffff !important; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -227,9 +272,11 @@ if not st.session_state.astra_init:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Display History
-for m in st.session_state.messages:
-    role_class = "user-msg" if m["role"] == "user" else "ai-msg"
-    st.markdown(f'<div class="{role_class}">{m["content"]}</div>', unsafe_allow_html=True)
+chat_container = st.container()
+with chat_container:
+    for m in st.session_state.messages:
+        role_class = "user-msg" if m["role"] == "user" else "ai-msg"
+        st.markdown(f'<div class="{role_class}">{m["content"]}</div>', unsafe_allow_html=True)
 
 # Input
 if prompt := st.chat_input("Command..."):
