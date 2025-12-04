@@ -47,25 +47,9 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Knewave&family=Inter:wght@400;500;600&display=swap');
     
     /* GLOBAL THEME */
-    .stApp { 
-        background-color: #000000 !important; 
-        font-family: 'Inter', sans-serif; 
-        color: #ffffff !important;
-    }
-    
-    /* LAYOUT CLEANUP */
-    .block-container { 
-        padding-top: 2rem !important; 
-        padding-bottom: 8rem !important; 
-        max-width: 800px !important; 
-        margin: 0 auto; 
-    }
-    
-    /* HIDE CRUFT */
-    #MainMenu, footer, header, div[data-testid="stStatusWidget"], section[data-testid="stSidebar"] { 
-        display: none !important; 
-        visibility: hidden !important; 
-    }
+    .stApp { background-color: #000000 !important; font-family: 'Inter', sans-serif; color: #ffffff !important; }
+    .block-container { padding-top: 2rem !important; padding-bottom: 8rem !important; max-width: 800px !important; margin: 0 auto; }
+    #MainMenu, footer, header, div[data-testid="stStatusWidget"], section[data-testid="stSidebar"] { display: none !important; }
     .stSpinner { display: none !important; }
     
     /* LOGO */
@@ -113,7 +97,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3. BACKEND INTELLIGENCE (Always-On Awareness)
+# 3. BACKEND INTELLIGENCE (v14.0 - The Neural Link)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @st.cache_data(ttl=900)
@@ -127,7 +111,80 @@ def get_weather():
 def get_google_creds():
     return Credentials(None, refresh_token=REFRESH_TOKEN, token_uri="https://oauth2.googleapis.com/token", client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
 
-# CACHED TO PREVENT LAG, BUT ALWAYS ACCESSIBLE
+def strip_html(html_content):
+    if not html_content: return ""
+    soup = BeautifulSoup(html_content, "html.parser")
+    return soup.get_text(separator=" ", strip=True)[:1000] # Limit chunk size
+
+# --- ACADEMIC ENGINE (Canvas v7.1 Parity) ---
+@st.cache_data(ttl=300)
+def get_academic_audit():
+    try:
+        canvas = Canvas(CANVAS_URL, CANVAS_KEY)
+        user = canvas.get_current_user()
+        
+        audit_log = []
+        syllabus_context = []
+        
+        courses = user.get_courses(enrollment_state='active', include=['total_scores', 'syllabus_body', 'teachers'])
+        
+        for c in courses:
+            try:
+                # 1. METADATA & PROFESSOR
+                course_name = c.name
+                prof_name = "Unknown"
+                # Try to find teacher (API varying support)
+                if hasattr(c, 'teachers') and c.teachers:
+                    prof_name = c.teachers[0]['display_name']
+                
+                # 2. GRADES (Intervention Agent)
+                e = getattr(c, 'enrollments', [{}])[0]
+                score = e.get('computed_current_score', 0)
+                grade_status = f"{score}%"
+                if score < 80: 
+                    grade_status += f" [ALERT: INTERVENTION NEEDED - Prof. {prof_name}]"
+                
+                # 3. ASSIGNMENTS (Categorization Engine)
+                assignments = list(c.get_assignments(bucket='upcoming', limit=3))
+                overdue = list(c.get_assignments(bucket='past', limit=5))
+                
+                missing_tasks = []
+                for a in overdue:
+                    if hasattr(a, 'due_at') and a.due_at:
+                        due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
+                        if (datetime.utcnow() - due).days > 0 and not a.has_submitted_submissions:
+                            missing_tasks.append(a.name)
+                            
+                task_status = ""
+                if missing_tasks: 
+                    task_status = f"MISSING: {', '.join(missing_tasks[:2])}"
+                elif assignments:
+                    next_a = assignments[0]
+                    task_status = f"NEXT: {next_a.name} ({next_a.due_at})"
+                else:
+                    task_status = "Status: Idle"
+
+                # 4. SYLLABUS & ANNOUNCEMENTS (Instant RAG)
+                # Store syllabus snippets for context injection
+                if hasattr(c, 'syllabus_body') and c.syllabus_body:
+                    clean_syl = strip_html(c.syllabus_body)
+                    syllabus_context.append(f"[{course_name} POLICY]: {clean_syl[:500]}...")
+                
+                # Fetch recent announcements
+                anns = c.get_discussion_topics(only_announcements=True, limit=1)
+                for a in anns:
+                    syllabus_context.append(f"[{course_name} ANNOUNCEMENT]: {a.title}")
+
+                audit_log.append(f"{course_name} | Grade: {grade_status} | {task_status}")
+                
+            except: continue
+            
+        full_report = "\n".join(audit_log) if audit_log else "No active data."
+        rag_data = "\n".join(syllabus_context)
+        return full_report, rag_data
+        
+    except: return "Canvas Offline", ""
+
 @st.cache_data(ttl=300) 
 def get_calendar_audit():
     try:
@@ -143,41 +200,6 @@ def get_calendar_audit():
             summary.append(f"{e['summary']} ({dt})")
         return "; ".join(summary)
     except: return "Calendar Offline"
-
-@st.cache_data(ttl=300)
-def get_academic_audit():
-    try:
-        canvas = Canvas(CANVAS_URL, CANVAS_KEY)
-        user = canvas.get_current_user()
-        
-        report = []
-        # Check Grades
-        for c in user.get_courses(enrollment_state='active', include=['total_scores']):
-            try:
-                e = getattr(c, 'enrollments', [{}])[0]
-                score = e.get('computed_current_score', 0)
-                grade = e.get('computed_current_grade', 'N/A')
-                
-                # Flag failing/low grades
-                if score < 75:
-                    status = f"RISK: {c.name} ({score}%)"
-                    
-                    # Check Assignments for this specific risky course
-                    assignments = list(c.get_assignments(bucket='upcoming', limit=3))
-                    if not assignments:
-                        status += " [STATUS: STAGNANT - NO TASKS LOGGED. REQUIRE STUDY PLAN.]"
-                    else:
-                        for a in assignments:
-                            if a.due_at:
-                                due = datetime.strptime(a.due_at, "%Y-%m-%dT%H:%M:%SZ")
-                                days = (due - datetime.utcnow()).days
-                                if days < 5:
-                                    status += f" -> URGENT: {a.name} due in {days} days"
-                    
-                    report.append(status)
-            except: continue
-        return "\n".join(report) if report else "No active courses/tasks found."
-    except: return "Canvas Offline"
 
 def deep_search(query):
     try:
@@ -203,15 +225,24 @@ if not st.session_state.messages:
 
 # --- PROACTIVE BRIEFING ---
 if not st.session_state.astra_init:
+    school_report, school_rag = get_academic_audit()
     cal_status = get_calendar_audit()
-    school_status = get_academic_audit()
     
-    # Intelligence Check: Only speak if needed
-    if "URGENT" in school_status or "RISK" in school_status or cal_status != "Schedule Clear":
-        sys_prompt = f"You are ASTRA. The user has just logged in.\n\nSTATUS:\n- Academics: {school_status}\n- Calendar: {cal_status}\n\nTASK: Give a 1-sentence Executive Summary of the biggest threat/priority. Be direct."
+    # Intelligence Check: Speak if intervention needed
+    if "ALERT" in school_report or "MISSING" in school_report or "High Load" in cal_status:
+        sys_prompt = f"""You are ASTRA. Proactive Briefing.
+        
+        [LIVE DATA]
+        - School: {school_report}
+        - Calendar: {cal_status}
+        
+        TASK:
+        1. Executive Summary: Identification of threats (Grades < 80% or Missing Work).
+        2. Intervention: Propose specific actions (Draft email to Prof, Block study time).
+        3. Be concise.
+        """
         try:
             genai.configure(api_key=GENAI_KEY)
-            # STRICT: Use 2.5 Flash only
             model = genai.GenerativeModel('gemini-2.5-flash')
             alert = model.generate_content(sys_prompt).text
             st.session_state.messages.append({"role": "assistant", "content": alert})
@@ -232,36 +263,35 @@ if prompt := st.chat_input("Command..."):
     st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 5. THE INTELLIGENCE CORE (Fixed Context Logic)
+# 5. THE OMNIPOTENT BRAIN (v14.0)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     last_prompt = st.session_state.messages[-1]["content"]
     
-    # --- UNIVERSAL CONTEXT (The Fix) ---
-    # We fetch these EVERY time so the AI is never "blind"
+    # --- UNIVERSAL CONTEXT ---
+    school_report, school_rag = get_academic_audit()
     cal_context = get_calendar_audit()
-    acad_context = get_academic_audit()
     
-    # Optional Search (Only if needed to save tokens/latency)
     web_context = ""
     if any(x in last_prompt.lower() for x in ["search", "find", "who", "what", "where", "news", "learn"]):
         web_context = deep_search(last_prompt)
 
-    # --- SYSTEM PROMPT (v12.2 - Resourcefulness Patch) ---
+    # --- SYSTEM PROMPT (v14.0 - The Neural Link) ---
     SYS_PROMPT = f"""You are ASTRA, a Context-Aware Neural Interface.
     
-    [LIVE USER DATA - DO NOT IGNORE]
+    [LIVE DATA STREAM]
     CALENDAR: {cal_context}
-    ACADEMICS: {acad_context}
+    ACADEMIC REPORT: {school_report}
+    SYLLABUS/POLICY RAG: {school_rag}
     WEB SEARCH: {web_context}
     
-    DIRECTIVES:
-    1. **Context First**: Never say "I don't know" about the user's life. Look at the LIVE USER DATA above. If the user asks "What should I do?", look for URGENT assignments in the Academics section.
-    2. **Ambiguity Handling**: If the user is vague (e.g., "This sucks"), assume they are talking about the hardest item on their schedule or lowest grade.
-    3. **Summarization**: Output strict 1-2 paragraph executive summaries. No fluff.
-    4. **Resourcefulness**: If academic data is missing (e.g., 0% grade, no tasks logged), DO NOT complain. Fallback to general curriculum standards (e.g., "Since no assignments are logged for AP Human Geography, I recommend reviewing Unit 1: Thinking Geographically. Shall I generate a study guide?").
-    5. **Persona**: You are a Chief of Staff. Efficient, low-empathy, high-competence.
+    CORE RULES (STRICT):
+    1. **Syllabus Engine**: If user asks about policies ("late work", "grading"), CHECK THE SYLLABUS RAG above first.
+    2. **Intervention Agent**: If grades are marked ALERT, suggest: "Shall I draft an email to the professor?"
+    3. **Missing Work**: If tasks are MISSING, prioritize them over everything else.
+    4. **Proactive**: Never say "I don't know" if the data is in the stream.
+    5. **Output**: Max 1-2 paragraphs. Synthesize.
     """
 
     # --- GENERATION ---
@@ -269,7 +299,6 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     
     try:
         genai.configure(api_key=GENAI_KEY)
-        # STRICT: Use 2.5 Flash only
         model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYS_PROMPT)
         history = [{"role": ("user" if m["role"]=="user" else "model"), "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
         chat = model.start_chat(history=history)
