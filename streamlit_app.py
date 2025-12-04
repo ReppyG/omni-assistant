@@ -23,17 +23,11 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 
 # --- THE VAULT (Secrets) ---
 try:
-    # Gemini Key
     GENAI_KEY = st.secrets["GENAI_KEY"]
-    
-    # Canvas Keys
     CANVAS_API_URL = st.secrets["CANVAS_API_URL"]
     CANVAS_API_KEY = st.secrets["CANVAS_API_KEY"]
-    
-    # Google Search Keys
     GOOGLE_SEARCH_KEY = st.secrets["GOOGLE_SEARCH_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
-    
 except Exception as e:
     st.error(f"SYSTEM ALERT: Secrets Configuration Incomplete. {e}")
     st.stop()
@@ -45,7 +39,6 @@ def google_search(query):
     try:
         service = build("customsearch", "v1", developerKey=GOOGLE_SEARCH_KEY)
         res = service.cse().list(q=query, cx=GOOGLE_CX, num=3).execute()
-        
         results = []
         if 'items' in res:
             for item in res['items']:
@@ -56,7 +49,6 @@ def google_search(query):
             return "\n".join(results)
         else:
             return "No results found on Google."
-            
     except Exception as e:
         return f"Google Search Uplink Failed: {e}"
 
@@ -65,7 +57,6 @@ def get_canvas_data(scope="assignments"):
     try:
         canvas = Canvas(CANVAS_API_URL, CANVAS_API_KEY)
         user = canvas.get_current_user()
-        
         output = []
         courses = user.get_courses(enrollment_state='active')
         for course in courses:
@@ -77,12 +68,11 @@ def get_canvas_data(scope="assignments"):
                         output.append(f"[Course: {course.name}] {a.name} (Due: {due.strftime('%m-%d %H:%M')})")
             except:
                 continue
-        
         return "\n".join(output) if output else "No upcoming tasks found."
     except Exception as e:
         return f"Canvas Link Failed: {e}"
 
-# --- THE BRAIN (Gemini 1.5 Pro) ---
+# --- THE BRAIN (UPDATED: Gemini 2.5 Pro) ---
 genai.configure(api_key=GENAI_KEY)
 
 SYS_PROMPT = """
@@ -94,7 +84,12 @@ You are a commercial-grade, high-efficiency executive assistant.
 4. Format: Clean Markdown. No fluff.
 """
 
-model = genai.GenerativeModel('gemini-2.5-pro-latest', system_instruction=SYS_PROMPT)
+# CRITICAL UPDATE: Using the stable 'gemini-2.5-pro' string without suffix
+try:
+    model = genai.GenerativeModel('gemini-2.5-pro', system_instruction=SYS_PROMPT)
+except:
+    # Fallback to Flash if Pro is rate-limited on free tier
+    model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=SYS_PROMPT)
 
 # --- THE INTERFACE ---
 st.markdown("<h1 style='text-align: center; color: #a855f7;'>O.M.N.I.</h1>", unsafe_allow_html=True)
@@ -118,19 +113,17 @@ if prompt := st.chat_input("Direct the intelligence..."):
         context_data = ""
         user_lower = prompt.lower()
         
-        # 1. School Route
         if any(w in user_lower for w in ["due", "school", "homework", "assignment", "canvas"]):
             with st.spinner("Connecting to Canvas LMS..."):
                 data = get_canvas_data()
                 context_data += f"\n[SYSTEM DATA: CANVAS]\n{data}\n"
 
-        # 2. Google Search Route (Triggers on questions or explicit 'search' commands)
         elif any(w in user_lower for w in ["search", "find", "what is", "who is", "news", "google"]):
             with st.spinner("Accessing Google Global Index..."):
                 data = google_search(prompt)
                 context_data += f"\n[SYSTEM DATA: GOOGLE SEARCH]\n{data}\n"
 
-        # 3. Generation
+        # --- GENERATION ---
         try:
             chat = model.start_chat(history=[])
             final_prompt = f"USER REQUEST: {prompt}\n\nAVAILABLE CONTEXT:\n{context_data}"
