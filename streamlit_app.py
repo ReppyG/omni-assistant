@@ -94,7 +94,7 @@ You are a commercial-grade, high-efficiency executive assistant.
 4. Format: Clean Markdown. No fluff.
 """
 
-model = genai.GenerativeModel('gemini-1.5-pro-latest', system_instruction=SYS_PROMPT)
+model = genai.GenerativeModel('gemini-3.0-pro-latest', system_instruction=SYS_PROMPT)
 
 # --- THE INTERFACE ---
 st.markdown("<h1 style='text-align: center; color: #a855f7;'>O.M.N.I.</h1>", unsafe_allow_html=True)
