@@ -48,7 +48,18 @@ st.markdown("""
         max-width: 100% !important;
     }
     
+    /* HIDE SPINNER & PREVENT GRAYING OUT */
     .stSpinner { display: none !important; }
+    
+    /* Force elements to stay opaque during processing/reruns */
+    .element-container, .stMarkdown, .stChatInput, .stApp > div {
+        opacity: 1 !important;
+        filter: none !important;
+        transition: none !important;
+    }
+    
+    /* Hide the top running man/loading bar */
+    div[data-testid="stStatusWidget"] { visibility: hidden; }
 
     /* ANIMATIONS */
     @keyframes gradientMove {
@@ -331,41 +342,41 @@ if st.session_state.astra_state == "BOOT":
 
 # --- AUTONOMOUS BRIEFING GENERATION ---
 if st.session_state.astra_state == "READY" and not st.session_state.briefing_generated:
-    with st.spinner("Compiling Morning Briefing..."):
-        grade_data = get_grade_analytics_df()
-        calendar_context = "No events."
-        if event and 'all_events' in event:
-            calendar_context = ", ".join([f"{e['summary']} at {e['start'].get('dateTime', 'All Day')}" for e in event['all_events']])
+    # Removed st.spinner to prevent screen darkening
+    grade_data = get_grade_analytics_df()
+    calendar_context = "No events."
+    if event and 'all_events' in event:
+        calendar_context = ", ".join([f"{e['summary']} at {e['start'].get('dateTime', 'All Day')}" for e in event['all_events']])
+    
+    task_context = "No urgent tasks."
+    if task and 'all' in task:
+        task_context = ", ".join([f"{t['title']} ({t['due']})" for t in task['all']])
         
-        task_context = "No urgent tasks."
-        if task and 'all' in task:
-            task_context = ", ".join([f"{t['title']} ({t['due']})" for t in task['all']])
-            
-        briefing_prompt = f"""
-        Generate a 'Strategic Briefing' for the user.
-        CONTEXT:
-        - Weather: {temp}, {cond} in {LOCATION}
-        - Upcoming: {calendar_context}
-        - Urgent: {task_context}
-        - Academics: {grade_data}
-        
-        INSTRUCTIONS:
-        1. Be concise, strategic, and executive.
-        2. Highlight the single most critical item.
-        3. Do not list everything; summarize the state of affairs.
-        4. End with "Ready for deployment."
-        """
-        
-        try:
-            genai.configure(api_key=GENAI_KEY)
-            model = genai.GenerativeModel('gemini-2.5-pro')
-            resp = model.generate_content(briefing_prompt)
-            briefing_text = resp.text
-            st.session_state.messages.append({"role": "assistant", "content": briefing_text})
-            st.session_state.briefing_generated = True
-            st.rerun()
-        except:
-            st.session_state.briefing_generated = True
+    briefing_prompt = f"""
+    Generate a 'Strategic Briefing' for the user.
+    CONTEXT:
+    - Weather: {temp}, {cond} in {LOCATION}
+    - Upcoming: {calendar_context}
+    - Urgent: {task_context}
+    - Academics: {grade_data}
+    
+    INSTRUCTIONS:
+    1. Be concise, strategic, and executive.
+    2. Highlight the single most critical item.
+    3. Do not list everything; summarize the state of affairs.
+    4. End with "Ready for deployment."
+    """
+    
+    try:
+        genai.configure(api_key=GENAI_KEY)
+        model = genai.GenerativeModel('gemini-2.5-pro')
+        resp = model.generate_content(briefing_prompt)
+        briefing_text = resp.text
+        st.session_state.messages.append({"role": "assistant", "content": briefing_text})
+        st.session_state.briefing_generated = True
+        st.rerun()
+    except:
+        st.session_state.briefing_generated = True
 
 # --- MAIN CHAT INTERFACE ---
 
