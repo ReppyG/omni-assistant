@@ -259,7 +259,8 @@ if not st.session_state.astra_init:
         
         try:
             genai.configure(api_key=GENAI_KEY)
-            model = genai.GenerativeModel('gemini-2.5-pro')
+            # Try Pro first, fallback handled if this part crashes
+            model = genai.GenerativeModel('gemini-2.0-flash-exp') 
             alert = model.generate_content(sys_prompt).text
             st.session_state.messages.append({"role": "assistant", "content": alert})
             st.rerun()
@@ -288,47 +289,45 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     last_prompt = st.session_state.messages[-1]["content"]
     
     # --- DYNAMIC INTELLIGENCE ---
-    # The AI decides what tools to use based on the user's intent.
-    # It does not ask permission. It executes.
-    
     ctx = ""
     lp = last_prompt.lower()
     
-    # 1. Search Vector
     if any(x in lp for x in ["search", "find", "who", "what", "where", "news"]):
         ctx += f"\n[SEARCH PROTOCOL]: {deep_search(last_prompt)}"
-        
-    # 2. Temporal Vector (Calendar)
     if any(x in lp for x in ["schedule", "calendar", "busy", "free", "tomorrow", "today"]):
         ctx += f"\n[CALENDAR PROTOCOL]: {get_calendar_audit()}"
-        
-    # 3. Academic Vector
     if any(x in lp for x in ["due", "grade", "score", "assignment", "test", "exam"]):
         ctx += f"\n[ACADEMIC PROTOCOL]: {get_academic_audit()}"
 
-    # SYSTEM PROMPT (The "Ghost")
-    SYS_PROMPT = """You are ASTRA. 
-    You are not a chatbot. You are a Neural Interface.
-    
-    CORE DIRECTIVES:
+    SYS_PROMPT = """You are ASTRA. Neural Interface.
+    DIRECTIVES:
     1. **Efficiency**: Use minimum words for maximum impact.
-    2. **Proactivity**: If the user's schedule is heavy, suggest rescheduling.
-    3. **Strategy**: If grades are low, suggest study topics immediately.
-    4. **Tone**: Calm, Omni-competent, slightly futuristic.
-    5. **Summarization**: When providing information or research results, ALWAYS condense findings into a sharp 1-2 paragraph summary. Never output full articles or excessive text walls.
+    2. **Proactivity**: If schedule is heavy, suggest rescheduling.
+    3. **Strategy**: If grades are low, suggest study topics.
+    4. **Summarization**: ALWAYS condense findings into 1-2 paragraph summaries. No walls of text.
     """
 
-    try:
-        genai.configure(api_key=GENAI_KEY)
-        model = genai.GenerativeModel('gemini-2.5-pro', system_instruction=SYS_PROMPT)
-        
-        history = [{"role": ("user" if m["role"]=="user" else "model"), "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
-        chat = model.start_chat(history=history)
-        
-        response = chat.send_message(f"LIVE DATA STREAM: {ctx}\n\nUSER INPUT: {last_prompt}")
-        reply = response.text
-    except Exception as e:
-        reply = f"Neural Link Unstable: {str(e)}"
+    # --- FALLBACK GENERATION LOGIC ---
+    models_to_try = ['gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.5-flash']
+    reply = "Neural Link Severed."
+    
+    for model_name in models_to_try:
+        try:
+            genai.configure(api_key=GENAI_KEY)
+            model = genai.GenerativeModel(model_name, system_instruction=SYS_PROMPT)
+            
+            history = [{"role": ("user" if m["role"]=="user" else "model"), "parts": [m["content"]]} for m in st.session_state.messages[:-1]]
+            chat = model.start_chat(history=history)
+            
+            response = chat.send_message(f"LIVE DATA STREAM: {ctx}\n\nUSER INPUT: {last_prompt}")
+            reply = response.text
+            break # Success, exit loop
+        except Exception as e:
+            if "429" in str(e):
+                continue # Try next model
+            reply = f"Neural Link Unstable: {str(e)}"
+            break # Non-quota error, stop trying
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
     st.rerun()
+    
