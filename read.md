@@ -1,29 +1,107 @@
-# O.M.N.I. (Operational Matrix & Neural Interface)
-**Version:** 3.0 (Executive Class)
-**Status:** ACTIVE / DEPLOYED
+O.M.N.I. (Operational Matrix & Neural Interface)
 
-## 1. System Architecture
-* **Core Brain:** Google Gemini 2.5 Pro
-* **Hosting:** Streamlit Community Cloud (Serverless)
-* **Interface:** Python Streamlit (Chat-Only UI)
-* **Memory:** Session State (Ephemeral)
+System Version: 5.0 (Deep Research Class)
+Architect: A.P.E.X. Protocol
+Host: Streamlit Community Cloud (Free Tier)
 
-## 2. Capabilities & Tools
-* **School:** Canvas LMS API (Read-Only) -> Checks assignments/grades.
-* **Search:** Google Custom Search JSON API -> Live web access.
-* **Calendar:** Google Calendar API (Read/Write) -> Manages schedule.
-* **Storage:** Google Drive API (Read-Only) -> Scans files.
+1. THE ARCHITECTURE
 
-## 3. Deployment Instructions
-1.  Clone Repository.
-2.  Install dependencies: `pip install -r requirements.txt`
-3.  **Secrets Management:** The following keys must be in `.streamlit/secrets.toml`:
-    * `GENAI_KEY` (Google AI Studio)
-    * `CANVAS_API_URL` & `CANVAS_API_KEY`
-    * `Google Search_KEY` & `GOOGLE_CX`
-    * `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` (OAuth)
+Language: Python 3.11+
 
-## 4. Current State (Phase 5 Snapshot)
-* **Integration Level:** High.
-* **Auth Strategy:** Headless OAuth via Refresh Token.
-* **Next Horizon:** Voice Interface or Visual Dashboard.
+Framework: Streamlit (Single-File Architecture)
+
+Intelligence: Google Gemini 2.5 Pro (Fallback: Flash)
+
+Styling: Custom CSS Injection (Glassmorphism/Neon)
+
+2. NEURAL CONNECTIONS (API Stack)
+
+Component
+
+Service
+
+Auth Method
+
+Status
+
+Brain
+
+Google Gemini API
+
+API Key (GENAI_KEY)
+
+Active
+
+School
+
+Canvas LMS API
+
+Token (CANVAS_API_KEY)
+
+Active
+
+Search
+
+Google Custom Search
+
+API Key (Google Search_KEY)
+
+Active
+
+Calendar
+
+Google Workspace
+
+OAuth2 (REFRESH_TOKEN)
+
+Read/Write
+
+Drive
+
+Google Workspace
+
+OAuth2 (REFRESH_TOKEN)
+
+Read Only
+
+Weather
+
+wttr.in
+
+HTTP Request
+
+Active
+
+3. FILE STRUCTURE
+
+streamlit_app.py: The Master Brain (UI + Logic + Tools).
+
+requirements.txt: Dependencies (streamlit, google-generativeai, canvasapi, google-api-python-client, google-auth-oauthlib, requests, beautifulsoup4).
+
+.streamlit/secrets.toml: The Vault (Stores all Keys - NEVER COMMIT TO GITHUB).
+
+4. CAPABILITIES
+
+Stealth HUD: Auto-hiding dashboard showing Next Class, Priority Task, and Local Weather.
+
+Deep Research: Scrapes full text from search results to answer complex queries.
+
+Executive Scheduling: Can read your calendar and autonomously schedule events.
+
+School Tracking: Monitors Canvas for upcoming deadlines.
+
+5. RECOVERY PROTOCOL
+
+If Calendar Fails: Regenerate REFRESH_TOKEN using Google OAuth Playground (Scopes: Calendar + Drive). Ensure CLIENT_SECRET matches.
+
+If Canvas Fails: Generate new Token in Canvas -> Account -> Settings.
+
+If Weather Fails: Check WEATHER_LOCATION in Secrets.
+
+6. FUTURE HORIZONS (Unimplemented)
+
+Voice Module: Javascript Speech-to-Text Bridge.
+
+Grade Simulator: Pandas Dataframe analysis of Canvas Grades.
+
+Focus Mode: Blocker for distraction sites.
